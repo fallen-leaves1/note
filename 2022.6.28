@@ -1,0 +1,90 @@
+# 防止XSS攻击
+xss:
+  # 过滤开关
+  enabled: true
+  # 排除链接（多个用逗号分隔）
+  excludes: /system/notice
+  # 匹配链接
+  urlPatterns: /system/*,/monitor/*,/tool/*
+  
+  
+  
+  public class BaseController {
+   protected final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+   @InitBinder
+   public void initBinder(WebDataBinder binder) {
+      binder.registerCustomEditor(Date.class, new PropertyEditorSupport() {
+         public void setAsText(String text) {
+            this.setValue(DateUtils.parseDate(text));
+         }
+      });
+   }
+
+   protected void startPage() {
+      PageUtils.startPage();
+   }
+
+   protected void startOrderBy() {
+      PageDomain pageDomain = TableSupport.buildPageRequest();
+      if (StringUtils.isNotEmpty(pageDomain.getOrderBy())) {
+         String orderBy = SqlUtil.escapeOrderBySql(pageDomain.getOrderBy());
+         PageHelper.orderBy(orderBy);
+      }
+
+   }
+
+   protected <T> TableDataInfo<T> getDataTable(List<T> list) {
+      TableDataInfo<T> rspData = new TableDataInfo();
+      rspData.setCode(200);
+      rspData.setMsg("查询成功");
+      rspData.setRows(list);
+      rspData.setTotal((new PageInfo(list)).getTotal());
+      return rspData;
+   }
+
+   public AjaxResult success() {
+      return AjaxResult.success();
+   }
+
+   public AjaxResult error() {
+      return AjaxResult.error();
+   }
+
+   public AjaxResult success(String message) {
+      return AjaxResult.success(message);
+   }
+
+   public AjaxResult error(String message) {
+      return AjaxResult.error(message);
+   }
+
+   protected AjaxResult toAjax(int rows) {
+      return rows > 0 ? AjaxResult.success() : AjaxResult.error();
+   }
+
+   protected AjaxResult toAjax(boolean result) {
+      return result ? this.success() : this.error();
+   }
+
+   public String redirect(String url) {
+      return StringUtils.format("redirect:{}", url);
+   }
+
+   public LoginUser getLoginUser() {
+      return SecurityUtils.getLoginUser();
+   }
+
+   public Long getUserId() {
+      return this.getLoginUser().getUserId();
+   }
+
+   public Long getDeptId() {
+      return this.getLoginUser().getDeptId();
+   }
+
+   public String getUsername() {
+      return this.getLoginUser().getUsername();
+   }
+}
+
