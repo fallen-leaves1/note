@@ -1,0 +1,162 @@
+/**
+ * 客户端鉴权实现
+ */
+@Service
+@CustomAuthenticationProvider
+public class ClientAuthValidImpl implements AuthenticationProvider {
+
+    private final Logger log = LoggerFactory.getLogger(ClientAuthValidImpl.class);
+    @Resource
+    private NetworkRegisterMapper networkRegisterMapper;
+    @Resource
+    private ITenantNetworkService tenantNetworkService;
+
+    @Override
+    public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+        Assert.isInstanceOf(ClientAuthAuthentication.class, authentication, "需要实例[ClientAuthAuthentication]对象进行鉴权");
+        ClientAuthAuthentication clientAuthAuthentication = (ClientAuthAuthentication) authentication;
+        // 机器码
+        String machineCode = (String) clientAuthAuthentication.getPrincipal();
+        // 校验注册码是否有效
+        String registerCode = (String) authentication.getCredentials();
+        //网点id
+        String networkId = (String) authentication.getDetails();
+        boolean flag = PrinterRegisterCodeValidUtils.valid(machineCode, registerCode);
+        if (!flag) {
+            log.info("注册码：{}未注册", registerCode);
+            throw new ValidDataException("注册码：" + registerCode + "未注册");
+        }
+        // 校验机器码、注册码是否有效
+        NetworkRegister networkRegister = new NetworkRegister();
+        networkRegister.setMachineCode(machineCode);
+        networkRegister.setTenantNetworkId(networkId);
+        networkRegister.setRegistrationCode(registerCode);
+        networkRegister.setActive(0);
+        List<NetworkRegister> networkRegisters = networkRegisterMapper.selectNetworkRegisterList(networkRegister);
+        if (networkRegisters.size() == 0) {
+            log.info("网点ID{}、机器码{}、注册码{}不存在或已失效", networkId, machineCode, registerCode);
+            throw new ValidDataException("网点ID"+networkId+"机器码"+machineCode+"注册码"+ returnRegisterCode(registerCode)+"不存在或已失效");
+        }
+        Optional<NetworkRegister> opt = networkRegisters.stream().filter(item -> item.getMachineCode().equals(machineCode)).findFirst();
+        if(!opt.isPresent()){
+            log.info("网点ID{}、机器码{}、注册码{}不存在或已失效", networkId, machineCode, registerCode);
+            throw new ValidDataException("网点ID"+networkId+"机器码"+machineCode+"注册码"+ returnRegisterCode(registerCode)+"不存在或已失效");
+        }
+         // 校验注册信息是否过期
+        if(DateUtils.getNowDate().after(opt.get().getExpirationTime())) {
+            log.info("注册码：{}已过期", registerCode);
+            throw new ValidDataException("注册码：" +  returnRegisterCode(registerCode) + "已过期");
+        }
+        // 获取租户网点信息
+        String tenantNetworkId = networkRegister.getTenantNetworkId();
+        TenantNetwork tenantNetwork = tenantNetworkService.selectTenantNetworkById(tenantNetworkId);
+        // 获取租户信息
+        String tenantId = tenantNetwork.getTenantId();
+        // Tenant tenant = tenantService.selectTenantById(tenantId);
+
+        // 手动拼接用户
+        SysUser user = new SysUser();
+        user.setUserId(0L);
+        user.setDeptId(0L);
+        user.setNickName(networkRegister.getRegisterName());
+        user.setUserName(networkRegister.getMachineCode());
+        user.setPassword(networkRegister.getRegistrationCode());
+        user.setStatus("0");
+        user.setDelFlag("0");
+        Map<String, Object> params = user.getParams();
+        params.put("providerRegionId", tenantNetwork.getProviderRegion());// 服务商区域主键
+        params.put("tenantId", tenantId);// 租户主键
+        params.put("tenantNetworkId", tenantNetworkId);// 租户网点主键
+        // 手动拼接角色
+        SysRole role = new SysRole();
+        role.setRoleId(0L);
+        role.setRoleName("打印机端");
+        role.setRoleKey("client");
+        role.setRoleSort("1");
+        role.setDataScope("1");
+        role.setStatus("0");
+        role.setDelFlag("");
+        user.setRoles(Collections.singletonList(role));
+        return new ClientAuthAuthentication(new LoginUser(user, new HashSet<>()));
+    }
+
+    @Override
+    public boolean supports(Class<?> authentication) {
+        return ClientAuthAuthentication.class.isAssignableFrom(authentication);
+    }
+
+    /**
+     * 自定义客户端鉴鉴权对象
+     */
+    public static class ClientAuthAuthentication implements Authentication {
+
+        /** 机器码/登录成功用户数据 */
+        private final Object principal;
+        /** 注册码 */
+        private String registerCode;
+        //网点id
+        private String networkId;
+
+        public ClientAuthAuthentication(String principal, String registerCode, String networkId) {
+            this.principal = principal;
+            this.registerCode = registerCode;
+            this.networkId = networkId;
+        }
+
+        public ClientAuthAuthentication(LoginUser loginUser) {
+            this.principal = loginUser;
+        }
+
+        @Override
+        public Collection<? extends GrantedAuthority> getAuthorities() {
+            return null;
+        }
+
+        @Override
+        public Object getCredentials() {
+            return registerCode;
+        }
+
+        @Override
+        public Object getDetails() {
+            return networkId;
+        }
+
+        @Override
+        public Object getPrincipal() {
+            return principal;
+        }
+
+        @Override
+        public boolean isAuthenticated() {
+            return false;
+        }
+
+        @Override
+        public void setAuthenticated(boolean isAuthenticated) throws IllegalArgumentException {
+            // 不需要配置
+        }
+
+        @Override
+        public String getName() {
+            if (principal instanceof LoginUser) return ((LoginUser) principal).getUsername();
+            return principal.toString();
+        }
+    }
+
+    //注册码保留后4位
+    private String returnRegisterCode(String code){
+        if(StringUtils.isBlank(code)){
+            return code;
+        }
+        String s = "";
+        String[] arr = code.split("-");
+        for(int i=0; i < arr.length - 2; i++){
+            if(i > 0){
+                s += "-";
+            }
+            s += "****";
+        }
+        return s + "-" + arr[arr.length-1];
+    }
+}
