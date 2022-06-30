@@ -1,0 +1,21 @@
+//前端
+    常见的事件:
+
+        click: 点击一次;   当鼠标点击，触发事件
+
+        dblclick: 双击；当鼠标双击，触发事件
+
+        focus: 获取焦点；  当得到了光标，触发事件
+
+        blur: 失去焦点;   当失去了光标，触发事件
+
+        mouseover:鼠标移至；  鼠标移至某标签上方，触发事件
+
+        mouserout:鼠标移出； 鼠标移出某标签上方，触发事件
+
+        keyup:键盘按下；  键盘按下，触发事件
+        绑定多个事件
+        <button v-on="{click: clickMethds, mousemove: mouseMethods}">按钮<button>
+        绑定多个函数
+        <button @click="click1,click2"></button>
+
